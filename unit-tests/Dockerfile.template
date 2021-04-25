@@ -1,0 +1,11 @@
+FROM %BASE% as base
+
+FROM base as builder
+
+RUN pip install tox
+
+FROM base
+
+COPY --from=builder /usr/local /usr/local
+
+RUN groupadd -o -g %GID% tox && useradd -o -m -u %UID% -g %GID% tox

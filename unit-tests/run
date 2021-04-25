@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Copyright (C) 2017 2ndQuadrant Limited
+
+set -xeu
+
+if [ -z "${1:-}" ]
+then
+  echo "Protocol error: invoke with --get-jobs"
+  exit 76 # EX_PROTOCOL
+fi
+
+if [ "$1" = "--get-jobs" ]
+then
+  cat <<-EOF
+	python 2.6|./run mnencia/python:2.6 py26
+	python 2.7|./run mnencia/python:2.7 py27
+	python 3.5|./run python:3.5 py35
+	python 3.6|./run python:3.6 py36
+	python 3.7|./run python:3.7 py37
+	python 3.8|./run python:3.8 py38
+	flake8|./run python:3.7 flake8
+	EOF
+  exit 0
+fi
+
+base_image=$1
+toxenv=$2
+build_id=${BUILD_ID:-pid$$}
+
+srcdir=$(cd ../src; pwd)
+uidgid=$(docker run --rm -v "$srcdir":"$srcdir" "$1" stat -c %u:%g "$srcdir")
+
+rm -fr "work/${toxenv}" "work/${toxenv}.iid"
+mkdir -p "work/${toxenv}"
+sed -e "s#%BASE%#${base_image}#g" \
+    -e "s#%UID%#${uidgid%:*}#g" \
+    -e "s#%GID%#${uidgid#*:}#g" \
+    Dockerfile.template > "work/${toxenv}/Dockerfile"
+touch -m -r Dockerfile.template "work/${toxenv}/Dockerfile"
+docker build --iidfile "work/${toxenv}.iid" "work/${toxenv}"
+image_id=$(cat "work/${toxenv}.iid")
+
+exec docker run -i $(tty -s && echo -t) \
+  --rm --name "barman_unit_test_${build_id}_${toxenv}" \
+  -u $uidgid \
+  -w ${srcdir} -v ${srcdir}:${srcdir}:rw \
+  ${image_id} \
+  tox -e "${toxenv}"
