@@ -27,7 +27,7 @@ base_image=$1
 toxenv=$2
 build_id=${BUILD_ID:-pid$$}
 
-srcdir=$(cd ../src; pwd)
+srcdir=$(cd ..; pwd)
 uidgid=$(docker run --rm -v "$srcdir":"$srcdir" "$1" stat -c %u:%g "$srcdir")
 
 rm -fr "work/${toxenv}" "work/${toxenv}.iid"
