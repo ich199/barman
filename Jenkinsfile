@@ -19,11 +19,28 @@ pipeline {
              containers:
                - name: ci
                  image: ci
-                 command: ['docker', 'run', '-p', '80:80', 'httpd:latest']
+                 command: ['docker', 'run', '-p', '80:80', 'httpd:latest'] 
+                 imagePullPolicy: Never
+                 securityContext:
+                   privileged: true
                  env:
+                 - name: POD_IP
+                   valueFrom:
+                   fieldRef:
+                     fieldPath: status.podIP
                  - name: DOCKER_HOST
                    value: tcp://localhost:2375
                  imagePullPolicy: Never
+               - name: dind
+                 image: docker:18.05-dind
+                 securityContext:
+                   privileged: true
+                 volumeMounts:
+                   - name: dind-storage
+                     mountPath: /var/lib/docker
+             volumes:
+               - name: dind-storage
+                 emptyDir: {}
           """.stripIndent()
        }
     }
@@ -32,7 +49,6 @@ pipeline {
             parallel {
                 stage('flake8') {
                     steps{
-                        cleanWs()
                         dir ('unit-tests'){
                             sh './run python:3.7 flake8'
                         }
@@ -40,9 +56,29 @@ pipeline {
                 }
                 stage('py38') {
                     steps{
-                        cleanWs()
                         dir ('unit-tests'){
                             sh './run python:3.8 py38'
+                        }
+                    }
+                }
+                stage('py37') {
+                    steps{
+                        dir ('unit-tests'){
+                            sh './run python:3.7 py37'
+                        }
+                    }
+                }
+                stage('py36') {
+                    steps{
+                        dir ('unit-tests'){
+                            sh './run python:3.6 py36'
+                        }
+                    }
+                }
+                stage('py35') {
+                    steps{
+                        dir ('unit-tests'){
+                            sh './run python:3.5 py35'
                         }
                     }
                 }

@@ -28,6 +28,8 @@ toxenv=$2
 build_id=${BUILD_ID:-pid$$}
 
 srcdir=$(cd ..; pwd)
+ls -al ${srcdir}
+ls -al .
 uidgid=$(docker run --rm -v "$srcdir":"$srcdir" "$1" stat -c %u:%g "$srcdir")
 
 rm -fr "work/${toxenv}" "work/${toxenv}.iid"
@@ -39,7 +41,8 @@ sed -e "s#%BASE%#${base_image}#g" \
 touch -m -r Dockerfile.template "work/${toxenv}/Dockerfile"
 docker build --iidfile "work/${toxenv}.iid" "work/${toxenv}"
 image_id=$(cat "work/${toxenv}.iid")
-
+ls -al /home/jenkins/agent/workspace/barman/barman-unit-tests
+ls -al /home/jenkins/agent/workspace/barman/barman-unit-tests/unit-tests
 exec docker run -i $(tty -s && echo -t) \
   --rm --name "barman_unit_test_${build_id}_${toxenv}" \
   -u $uidgid \
