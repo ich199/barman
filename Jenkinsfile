@@ -18,9 +18,9 @@ pipeline {
            spec:
              containers:
                - name: ci
-                 image: ci
+                 image: nexus-docker.edbosetest.com/ci:latest 
                  command: ['docker', 'run', '-p', '80:80', 'httpd:latest'] 
-                 imagePullPolicy: Never
+                 imagePullPolicy: Always
                  securityContext:
                    privileged: true
                  env:
@@ -30,7 +30,6 @@ pipeline {
                      fieldPath: status.podIP
                  - name: DOCKER_HOST
                    value: tcp://localhost:2375
-                 imagePullPolicy: Never
                - name: dind
                  image: docker:18.05-dind
                  securityContext:
@@ -38,6 +37,8 @@ pipeline {
                  volumeMounts:
                    - name: dind-storage
                      mountPath: /var/lib/docker
+             imagePullSecrets:
+    	       - name: nexus-pull-secret
              volumes:
                - name: dind-storage
                  emptyDir: {}
