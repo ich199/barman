@@ -18,8 +18,8 @@ pipeline {
            spec:
              containers:
                - name: ci
-                 image: nexus-docker.edbosetest.com/ci:latest 
-                 command: ['docker', 'run', '-p', '80:80', 'httpd:latest'] 
+                 image: nexus-docker.edbosetest.com/ci:latest
+                 command: ['docker', 'run', '-p', '80:80', 'httpd:latest']
                  imagePullPolicy: Always
                  securityContext:
                    privileged: true
@@ -38,7 +38,7 @@ pipeline {
                    - name: dind-storage
                      mountPath: /var/lib/docker
              imagePullSecrets:
-    	       - name: nexus-pull-secret
+               - name: nexus-pull-secret
              volumes:
                - name: dind-storage
                  emptyDir: {}
