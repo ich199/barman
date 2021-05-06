@@ -1,5 +1,3 @@
-#! groovy
-
 pipeline {
     environment {
        lib = null
@@ -7,7 +5,7 @@ pipeline {
     }
     agent {
       kubernetes {
-         defaultContainer 'ci'
+         defaultContainer 'ci-dind'
          yaml """\
            apiVersion: v1
            kind: Pod
@@ -17,8 +15,8 @@ pipeline {
                namespace: jenkins
            spec:
              containers:
-               - name: ci
-                 image: nexus-docker.edbosetest.com/ci:latest
+               - name: ci-dind
+                 image: nexus-docker.edbosetest.com/ci-dind:latest
                  command: ['docker', 'run', '-p', '80:80', 'httpd:latest']
                  imagePullPolicy: Always
                  securityContext:
@@ -46,10 +44,28 @@ pipeline {
        }
     }
     stages {
+        stage('Build and push doker image') {
+            when {
+                allOf {
+                    branch 'master'
+                    expression {
+                        sh(script: 'git diff --name-only $GIT_PREVIOUS_COMMIT $GIT_COMMIT | grep ^Dockerfile$ > /dev/null', returnStatus: true ) == 0
+                    }
+                }
+            }
+            steps {
+                script {
+                    docker.withRegistry('https://nexus-docker.edbosetest.com', 'nexus-token') {
+                    image = docker.build("ci-dind:latest")
+                    image.push()
+                    }
+                }
+            }
+        }
         stage('Unit tests') {
             parallel {
                 stage('flake8') {
-                    steps{
+                    steps {
                         dir ('unit-tests'){
                             sh './run python:3.7 flake8'
                         }
@@ -76,14 +92,8 @@ pipeline {
                         }
                     }
                 }
-                stage('py35') {
-                    steps{
-                        dir ('unit-tests'){
-                            sh './run python:3.5 py35'
-                        }
-                    }
-                }
             }
         }
     }
 }
+
