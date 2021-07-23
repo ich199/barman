@@ -1,6 +1,6 @@
-% BARMAN-CLOUD-BACKUP(1) Barman User manuals | Version 2.12
-% 2ndQuadrant <http://www.2ndQuadrant.com>
-% November 5, 2020
+% BARMAN-CLOUD-BACKUP(1) Barman User manuals | Version 2.12.1
+% EnterpriseDB <http://www.enterprisedb.com>
+% June 30, 2021
 
 # NAME
 
@@ -20,7 +20,7 @@ to PGDATA and tablespaces (normally run as `postgres` user).
 Currently only AWS S3 is supported.
 
 This script and Barman are administration tools for disaster recovery
-of PostgreSQL servers written in Python and maintained by 2ndQuadrant.
+of PostgreSQL servers written in Python and maintained by EnterpriseDB.
 
 **IMPORTANT:** the Cloud upload process may fail if any file with a
 size greater than the configured `--max-archive-size` is present
@@ -66,9 +66,12 @@ SERVER_NAME
 -j, --bzip2
 :    bzip2-compress the tar files when uploading to the cloud
 
--e, --encrypt
-:    enable server-side encryption for the transfer.
+-e, --encryption
+:    The encryption algorithm used when storing the uploaded data in S3.
      Allowed values: 'AES256'|'aws:kms'.
+
+-d, --dbname
+:    database name or conninfo string for Postgres connection (default: postgres)
 
 -h, --host
 :    host or Unix socket for PostgreSQL connection (default: libpq settings)
@@ -130,11 +133,11 @@ Any bug can be reported via the Github issue tracker.
 
 * Homepage: <http://www.pgbarman.org/>
 * Documentation: <http://docs.pgbarman.org/>
-* Professional support: <http://www.2ndQuadrant.com/>
+* Professional support: <http://www.enterprisedb.com/>
 
 # COPYING
 
-Barman is the property of 2ndQuadrant Limited
+Barman is the property of EnterpriseDB UK Limited
 and its code is distributed under GNU General Public License v3.
 
 © Copyright EnterpriseDB UK Limited 2011-2021
