@@ -132,7 +132,7 @@ def connectivity_test(config):
     ssh_command = build_ssh_command(config)
     try:
         output = subprocess.Popen(ssh_command, stdout=subprocess.PIPE).communicate()
-        print(output[0])
+        print(output[0].decode("utf-8"))
         sys.exit(0)
     except subprocess.CalledProcessError as e:
         exit_with_error("Impossible to invoke remote put-wal: %s" % e)
@@ -184,12 +184,12 @@ def parse_arguments(args=None):
     parser.add_argument(
         "server_name",
         metavar="SERVER_NAME",
-        help="The server name configured in Barman " "from which WALs are taken.",
+        help="The server name configured in Barman from which WALs are taken.",
     )
     parser.add_argument(
         "wal_path",
         metavar="WAL_PATH",
-        help="The value of the '%%p' keyword " "(according to 'archive_command').",
+        help="The value of the '%%p' keyword (according to 'archive_command').",
     )
     return parser.parse_args(args=args)
 

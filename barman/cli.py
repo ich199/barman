@@ -33,6 +33,7 @@ from argh import ArghParser, arg, expects_obj, named
 import barman.config
 import barman.diagnose
 from barman import output
+from barman.annotations import KeepManager
 from barman.config import RecoveryOptions
 from barman.exceptions import BadXlogSegmentName, RecoveryException, SyncError
 from barman.infofile import BackupInfo
@@ -99,7 +100,7 @@ def list_server(minimal=False):
 
 @arg(
     "--keep-descriptors",
-    help="Keep the stdout and the stderr streams attached " "to Barman subprocesses.",
+    help="Keep the stdout and the stderr streams attached to Barman subprocesses.",
 )
 def cron(keep_descriptors=False):
     """
@@ -340,7 +341,7 @@ def status(args):
     default="all",
     help="""
          Possible values are: 'hot-standby' (only hot standby servers),
-         'wal-streamer' (only WAL streaming clients, such as pg_receivexlog),
+         'wal-streamer' (only WAL streaming clients, such as pg_receivewal),
          'all' (any of them). Defaults to %(default)s""",
 )
 @expects_obj
@@ -505,7 +506,7 @@ def rebuild_xlogdb(args):
     dest="standby_mode",
     action="store_true",
     default=SUPPRESS,
-    help="Enable standby mode when starting " "the recovered PostgreSQL instance",
+    help="Enable standby mode when starting the recovered PostgreSQL instance",
 )
 @expects_obj
 def recover(args):
@@ -963,7 +964,7 @@ def delete(args):
 @arg(
     "--output-directory",
     "-o",
-    help="put the retrieved WAL file in this directory " "with the original name",
+    help="put the retrieved WAL file in this directory with the original name",
     default=SUPPRESS,
 )
 @arg(
@@ -1110,7 +1111,7 @@ def archive_wal(args):
 )
 @arg(
     "--reset",
-    help="reset the status of receive-wal removing " "any status files",
+    help="reset the status of receive-wal removing any status files",
     action="store_true",
 )
 @arg(
@@ -1174,6 +1175,57 @@ def check_backup(args):
     with closing(server):
         server.check_backup(backup_info)
     output.close_and_exit()
+
+
+@named("keep")
+@arg(
+    "server_name",
+    completer=server_completer,
+    help="specifies the server name for the command",
+)
+@arg("backup_id", completer=backup_completer, help="specifies the backup ID")
+@arg("--release", help="remove the keep annotation", action="store_true")
+@arg(
+    "--status",
+    help="return the keep status of the backup",
+    action="store_true",
+)
+@arg(
+    "--target",
+    help="keep this backup with the specified recovery target",
+    choices=[KeepManager.TARGET_FULL, KeepManager.TARGET_STANDALONE],
+)
+@expects_obj
+def keep(args):
+    """
+    Tag the specified backup so that it will never be deleted
+    """
+    if not any((args.release, args.status, args.target)):
+        output.error(
+            "one of the arguments -r/--release -s/--status --target is required"
+        )
+        output.close_and_exit()
+    server = get_server(args)
+    backup_info = parse_backup_id(server, args)
+    backup_manager = server.backup_manager
+    if args.status:
+        output.init("status", server.config.name)
+        target = backup_manager.get_keep_target(backup_info.backup_id)
+        if target:
+            output.result("status", server.config.name, "keep_status", "Keep", target)
+        else:
+            output.result("status", server.config.name, "keep_status", "Keep", "nokeep")
+    elif args.release:
+        backup_manager.release_keep(backup_info.backup_id)
+    else:
+        if backup_info.status != BackupInfo.DONE:
+            msg = (
+                "Cannot add keep to backup %s because it has status %s. "
+                "Only backups with status DONE can be kept."
+            ) % (backup_info.backup_id, backup_info.status)
+            output.error(msg)
+            output.close_and_exit()
+        backup_manager.keep_backup(backup_info.backup_id, args.target)
 
 
 def pretty_args(args):
@@ -1540,6 +1592,7 @@ def main():
             delete,
             diagnose,
             get_wal,
+            keep,
             list_backup,
             list_files,
             list_server,

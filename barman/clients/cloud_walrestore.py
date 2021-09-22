@@ -18,11 +18,13 @@
 
 import logging
 import os
+import sys
 from contextlib import closing
 
 import barman
-from barman.cloud import configure_logging
+from barman.cloud import configure_logging, ALLOWED_COMPRESSIONS
 from barman.cloud_providers import get_cloud_interface
+from barman.exceptions import BarmanException
 from barman.utils import force_str
 from barman.xlog import hash_dir, is_any_xlog_file, is_backup_file
 
@@ -98,11 +100,11 @@ def parse_arguments(args=None):
     )
     parser.add_argument(
         "wal_name",
-        help="The value of the '%%f' keyword " "(according to 'restore_command').",
+        help="The value of the '%%f' keyword (according to 'restore_command').",
     )
     parser.add_argument(
         "wal_dest",
-        help="The value of the '%%p' keyword " "(according to 'restore_command').",
+        help="The value of the '%%p' keyword (according to 'restore_command').",
     )
     parser.add_argument(
         "-V", "--version", action="version", version="%%(prog)s %s" % barman.__version__
@@ -156,9 +158,6 @@ class CloudWalDownloader(object):
     Cloud storage download client
     """
 
-    # Allowed compression algorithms
-    ALLOWED_COMPRESSIONS = {".gz": "gzip", ".bz2": "bzip2"}
-
     def __init__(self, cloud_interface, server_name):
         """
         Object responsible for handling interactions with cloud storage
@@ -200,7 +199,7 @@ class CloudWalDownloader(object):
             elif item.startswith(wal_path):
                 # Detect compression
                 basename = item
-                for e, c in self.ALLOWED_COMPRESSIONS.items():
+                for e, c in ALLOWED_COMPRESSIONS.items():
                     if item[-len(e) :] == e:
                         # Strip extension
                         basename = basename[: -len(e)]
@@ -231,6 +230,12 @@ class CloudWalDownloader(object):
                 "WAL file %s for server %s does not exists", wal_name, self.server_name
             )
             raise SystemExit(1)
+
+        if compression and sys.version_info < (3, 0, 0):
+            raise BarmanException(
+                "Compressed WALs cannot be restored with Python 2.x - "
+                "please upgrade to a supported version of Python 3"
+            )
 
         # Download the file
         logging.debug(

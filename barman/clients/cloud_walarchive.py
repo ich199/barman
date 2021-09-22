@@ -43,7 +43,7 @@ def __is_hook_script():
     if "BARMAN_HOOK" in os.environ and "BARMAN_PHASE" in os.environ:
         if (
             os.getenv("BARMAN_HOOK") in ("archive_script", "archive_retry_script")
-            and os.getenv("BARMAN_PHASE") == "post"
+            and os.getenv("BARMAN_PHASE") == "pre"
         ):
             return True
         else:
@@ -129,7 +129,7 @@ def parse_arguments(args=None):
     parser.add_argument(
         "wal_path",
         nargs="?",
-        help="the value of the '%%p' keyword" " (according to 'archive_command').",
+        help="the value of the '%%p' keyword (according to 'archive_command').",
         default=None,
     )
     parser.add_argument(
@@ -155,7 +155,8 @@ def parse_arguments(args=None):
     compression.add_argument(
         "-z",
         "--gzip",
-        help="gzip-compress the WAL while uploading to the cloud",
+        help="gzip-compress the WAL while uploading to the cloud "
+        "(should not be used with python < 3.2)",
         action="store_const",
         const="gzip",
         dest="compression",
@@ -163,7 +164,8 @@ def parse_arguments(args=None):
     compression.add_argument(
         "-j",
         "--bzip2",
-        help="bzip2-compress the WAL while uploading to the cloud",
+        help="bzip2-compress the WAL while uploading to the cloud "
+        "(should not be used with python < 3.3)",
         action="store_const",
         const="bzip2",
         dest="compression",

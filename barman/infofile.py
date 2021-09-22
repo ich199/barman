@@ -323,7 +323,7 @@ class WalFileInfo(FieldListFile):
     name = Field("name", doc="base name of WAL file")
     size = Field("size", load=int, doc="WAL file size after compression")
     time = Field(
-        "time", load=float, doc="WAL file modification time " "(seconds since epoch)"
+        "time", load=float, doc="WAL file modification time (seconds since epoch)"
     )
     compression = Field("compression", doc="compression type")
 
@@ -424,7 +424,9 @@ class BackupInfo(FieldListFile):
     VALID = "VALID"
     POTENTIALLY_OBSOLETE = "OBSOLETE*"
     NONE = "-"
-    RETENTION_STATUS = (OBSOLETE, VALID, POTENTIALLY_OBSOLETE, NONE)
+    KEEP_FULL = "KEEP:FULL"
+    KEEP_STANDALONE = "KEEP:STANDALONE"
+    RETENTION_STATUS = (OBSOLETE, VALID, POTENTIALLY_OBSOLETE, KEEP_FULL, KEEP_STANDALONE, NONE)
 
     version = Field("version", load=int)
     pgdata = Field("pgdata")
@@ -584,6 +586,13 @@ class BackupInfo(FieldListFile):
         else:
             return str(major)
 
+    def wal_directory(self):
+        """
+        Returns "pg_wal" (v10 and above) or "pg_xlog" (v9.6 and below) based on
+        the Postgres version represented by this backup
+        """
+        return "pg_wal" if self.version >= 100000 else "pg_xlog"
+
 
 class LocalBackupInfo(BackupInfo):
     __slots__ = "server", "config", "backup_manager"
@@ -640,7 +649,7 @@ class LocalBackupInfo(BackupInfo):
                 self.backup_version = 1
         except Exception as e:
             _logger.warning(
-                "Error detecting backup_version, " "use default: 2. Failure reason: %s",
+                "Error detecting backup_version, use default: 2. Failure reason: %s",
                 e,
             )
 

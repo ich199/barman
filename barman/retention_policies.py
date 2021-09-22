@@ -34,6 +34,7 @@ from datetime import datetime, timedelta
 
 from dateutil import tz
 
+from barman.annotations import KeepManager
 from barman.infofile import BackupInfo
 from barman.utils import with_metaclass
 
@@ -59,7 +60,7 @@ class RetentionPolicy(with_metaclass(ABCMeta, object)):
             context = self.context
         # Overrides the list of available backups
         if source is None:
-            source = self.server.get_available_backups(BackupInfo.STATUS_NOT_EMPTY)
+            source = self.server.available_backups
         if context == "BASE":
             return self._backup_report(source)
         elif context == "WAL":
@@ -69,7 +70,7 @@ class RetentionPolicy(with_metaclass(ABCMeta, object)):
 
     def backup_status(self, backup_id):
         """Report the status of a backup according to the retention policy"""
-        source = self.server.get_available_backups(BackupInfo.STATUS_NOT_EMPTY)
+        source = self.server.available_backups
         if self.context == "BASE":
             return self._backup_report(source)[backup_id]
         else:
@@ -152,15 +153,15 @@ class RedundancyRetentionPolicy(RetentionPolicy):
         backups = source
         # Normalise the redundancy value (according to minimum redundancy)
         redundancy = self.value
-        if redundancy < self.server.config.minimum_redundancy:
+        if redundancy < self.server.minimum_redundancy:
             _logger.warning(
                 "Retention policy redundancy (%s) is lower than "
                 "the required minimum redundancy (%s). Enforce %s.",
                 redundancy,
-                self.server.config.minimum_redundancy,
-                self.server.config.minimum_redundancy,
+                self.server.minimum_redundancy,
+                self.server.minimum_redundancy,
             )
-            redundancy = self.server.config.minimum_redundancy
+            redundancy = self.server.minimum_redundancy
 
         # Map the latest 'redundancy' DONE backups as VALID
         # The remaining DONE backups are classified as OBSOLETE
@@ -169,7 +170,13 @@ class RedundancyRetentionPolicy(RetentionPolicy):
         i = 0
         for bid in sorted(backups.keys(), reverse=True):
             if backups[bid].status == BackupInfo.DONE:
-                if i < redundancy:
+                keep_target = self.server.get_keep_target(bid)
+                if keep_target == KeepManager.TARGET_STANDALONE:
+                    report[bid] = BackupInfo.KEEP_STANDALONE
+                elif keep_target:
+                    # Any other recovery target is treated as KEEP_FULL for safety
+                    report[bid] = BackupInfo.KEEP_FULL
+                elif i < redundancy:
                     report[bid] = BackupInfo.VALID
                     self._first_backup = bid
                 else:
@@ -265,43 +272,75 @@ class RecoveryWindowRetentionPolicy(RetentionPolicy):
         for bid in sorted(backups.keys(), reverse=True):
             # We are interested in DONE backups only
             if backups[bid].status == BackupInfo.DONE:
+                keep_target = self.server.get_keep_target(bid)
+                if keep_target == KeepManager.TARGET_STANDALONE:
+                    keep_target = BackupInfo.KEEP_STANDALONE
+                elif keep_target:
+                    # Any other recovery target is treated as KEEP_FULL for safety
+                    keep_target = BackupInfo.KEEP_FULL
+                # By found, we mean "found the first backup outside the recovery
+                # window" if that is the case then this bid is potentially obsolete.
                 if found:
                     # Check minimum redundancy requirements
-                    if valid < self.server.config.minimum_redundancy:
-                        _logger.warning(
-                            "Keeping obsolete backup %s for server %s "
-                            "(older than %s) "
-                            "due to minimum redundancy requirements (%s)",
-                            bid,
-                            self.server.config.name,
-                            self._point_of_recoverability(),
-                            self.server.config.minimum_redundancy,
-                        )
-                        # We mark the backup as potentially obsolete
-                        # as we must respect minimum redundancy requirements
-                        report[bid] = BackupInfo.POTENTIALLY_OBSOLETE
+                    if valid < self.server.minimum_redundancy:
+                        if keep_target:
+                            _logger.info(
+                                "Keeping obsolete backup %s for server %s "
+                                "(older than %s) "
+                                "due to keep status: %s",
+                                bid,
+                                self.server.name,
+                                self._point_of_recoverability,
+                                keep_target,
+                            )
+                            report[bid] = keep_target
+                        else:
+                            _logger.warning(
+                                "Keeping obsolete backup %s for server %s "
+                                "(older than %s) "
+                                "due to minimum redundancy requirements (%s)",
+                                bid,
+                                self.server.name,
+                                self._point_of_recoverability(),
+                                self.server.minimum_redundancy,
+                            )
+                            # We mark the backup as potentially obsolete
+                            # as we must respect minimum redundancy requirements
+                            report[bid] = BackupInfo.POTENTIALLY_OBSOLETE
                         self._first_backup = bid
                         valid = valid + 1
                     else:
-                        # We mark this backup as obsolete
-                        # (older than the first valid one)
-                        _logger.info(
-                            "Reporting backup %s for server %s as OBSOLETE "
-                            "(older than %s)",
-                            bid,
-                            self.server.config.name,
-                            self._point_of_recoverability(),
-                        )
-                        report[bid] = BackupInfo.OBSOLETE
+                        if keep_target:
+                            _logger.info(
+                                "Keeping obsolete backup %s for server %s "
+                                "(older than %s) "
+                                "due to keep status: %s",
+                                bid,
+                                self.server.name,
+                                self._point_of_recoverability,
+                                keep_target,
+                            )
+                            report[bid] = keep_target
+                        else:
+                            # We mark this backup as obsolete
+                            # (older than the first valid one)
+                            _logger.info(
+                                "Reporting backup %s for server %s as OBSOLETE "
+                                "(older than %s)",
+                                bid,
+                                self.server.name,
+                                self._point_of_recoverability(),
+                            )
+                            report[bid] = BackupInfo.OBSOLETE
                 else:
                     _logger.debug(
-                        "Reporting backup %s for server %s as VALID " "(newer than %s)",
+                        "Reporting backup %s for server %s as VALID (newer than %s)",
                         bid,
-                        self.server.config.name,
+                        self.server.name,
                         self._point_of_recoverability(),
                     )
                     # Backup within the recovery window
-                    report[bid] = BackupInfo.VALID
+                    report[bid] = keep_target or BackupInfo.VALID
                     self._first_backup = bid
                     valid = valid + 1
                     # TODO: Currently we use the backup local end time
@@ -364,7 +403,62 @@ class SimpleWALRetentionPolicy(RetentionPolicy):
         match = cls._re.match(optval)
         if not match:
             return None
-        return cls(context, server.config.retention_policy, server)
+        return cls(context, server.retention_policy, server)
+
+
+class ServerMetadata(object):
+    """
+    Static retention metadata for a barman-managed server
+
+    This will return the same values regardless of any changes in the state of
+    the barman-managed server and associated backups.
+    """
+
+    def __init__(self, server_name, backup_info_list, keep_manager):
+        self.name = server_name
+        self.minimum_redundancy = 0
+        self.retention_policy = None
+        self.backup_info_list = backup_info_list
+        self.keep_manager = keep_manager
+
+    @property
+    def available_backups(self):
+        return self.backup_info_list
+
+    def get_keep_target(self, backup_id):
+        return self.keep_manager.get_keep_target(backup_id)
+
+
+class ServerMetadataLive(ServerMetadata):
+    """
+    Live retention metadata for a barman-managed server
+
+    This will always return the current values for the barman.Server passed in
+    at construction time.
+    """
+
+    def __init__(self, server, keep_manager):
+        self.server = server
+        self.keep_manager = keep_manager
+
+    @property
+    def name(self):
+        return self.server.config.name
+
+    @property
+    def minimum_redundancy(self):
+        return self.server.config.minimum_redundancy
+
+    @property
+    def retention_policy(self):
+        return self.server.config.retention_policy
+
+    @property
+    def available_backups(self):
+        return self.server.get_available_backups(BackupInfo.STATUS_NOT_EMPTY)
+
+    def get_keep_target(self, backup_id):
+        return self.keep_manager.get_keep_target(backup_id)
 
 
 class RetentionPolicyFactory(object):
@@ -378,11 +472,18 @@ class RetentionPolicyFactory(object):
     ]
 
     @classmethod
-    def create(cls, server, option, value):
+    def create(cls, option, value, server=None, server_name=None, catalog=None):
         """
         Based on the given option and value from the configuration
         file, creates the appropriate retention policy object
         for the given server
+
+        Either server *or* server_name and backup_info_list must be provided.
+        If server (a `barman.Server`) is provided then the returned
+        RetentionPolicy will update as the state of the `barman.Server` changes.
+        If server_name and backup_info_list are provided then the RetentionPolicy
+        will be a snapshot based on the backup_info_list passed at construction
+        time.
         """
         if option == "wal_retention_policy":
             context = "WAL"
@@ -391,9 +492,17 @@ class RetentionPolicyFactory(object):
         else:
             raise ValueError("Unknown option for retention policy: %s" % option)
 
+        if server:
+            server_metadata = ServerMetadataLive(
+                server, keep_manager=server.backup_manager
+            )
+        else:
+            server_metadata = ServerMetadata(
+                server_name, catalog.get_backup_list(), keep_manager=catalog
+            )
         # Look for the matching rule
         for policy_class in cls.policy_classes:
-            policy = policy_class.create(server, context, value)
+            policy = policy_class.create(server_metadata, context, value)
             if policy:
                 return policy
 

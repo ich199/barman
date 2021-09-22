@@ -29,9 +29,12 @@
   [2ndqdebrepo]: https://apt.2ndquadrant.com/
   [boto3]: https://github.com/boto/boto3
   [boto3creds]: https://boto3.amazonaws.com/v1/documentation/api/latest/guide/configuration.html
+  [azure-identity]: https://docs.microsoft.com/en-us/python/api/azure-identity/?view=azure-python
+  [azure-storage-blob]: https://docs.microsoft.com/en-us/python/api/azure-storage-blob/?view=azure-python
+  [azure-storage-auth]: https://docs.microsoft.com/en-us/azure/storage/blobs/authorize-data-operations-cli#set-environment-variables-for-authorization-parameters
 
 
-  [3]: https://sourceforge.net/projects/pgbarman/files/
+  [3]: http://github.com/EnterpriseDB/barman
   [8]: http://en.wikipedia.org/wiki/Hard_link
   [9]: https://github.com/2ndquadrant-it/pgespresso
   [11]: http://www.pgbarman.org/

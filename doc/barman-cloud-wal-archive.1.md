@@ -1,6 +1,6 @@
-% BARMAN-CLOUD-WAL-ARCHIVE(1) Barman User manuals | Version 2.12.1
+% BARMAN-CLOUD-WAL-ARCHIVE(1) Barman User manuals | Version 2.14
 % EnterpriseDB <http://www.enterprisedb.com>
-% June 30, 2021
+% September 22, 2020
 
 # NAME
 
@@ -15,7 +15,13 @@ barman-cloud-wal-archive [*OPTIONS*] *DESTINATION_URL* *SERVER_NAME* *WAL_PATH*
 # DESCRIPTION
 
 This script can be used in the `archive_command` of a PostgreSQL
-server to ship WAL files to the Cloud. Currently only AWS S3 is supported.
+server to ship WAL files to the Cloud. Currently AWS S3 and Azure Blob
+Storage are supported.
+
+Note: If you are running python 2 or older unsupported versions of
+python 3 then avoid the compression options `--gzip` or `--bzip2` as
+barman-cloud-wal-restore is unable to restore gzip-compressed WALs
+on python < 3.2 or bzip2-compressed WALs on python < 3.3.
 
 This script and Barman are administration tools for disaster recovery
 of PostgreSQL servers written in Python and maintained by EnterpriseDB.
@@ -43,24 +49,40 @@ WAL_PATH
 -V, --version
 :    show program's version number and exit
 
--t, --test
-: test connectivity to the cloud destination and exit
+-v, --verbose
+:    increase output verbosity (e.g., -vv is more than -v)
 
--P, --profile
-: profile name (e.g. INI section in AWS credentials file)
+-q, --quiet
+:    decrease output verbosity (e.g., -qq is less than -q)
+
+-t, --test
+:    test connectivity to the cloud destination and exit
 
 -z, --gzip
-: gzip-compress the WAL while uploading to the cloud
+:    gzip-compress the WAL while uploading to the cloud
+     (should not be used with python < 3.2)
 
 -j, --bzip2
-: bzip2-compress the WAL while uploading to the cloud
+:    bzip2-compress the WAL while uploading to the cloud
+     (should not be used with python < 3.3)
 
--e ENCRYPT, --encryption ENCRYPT
-: The encryption algorithm used when storing the uploaded data in S3.
-  Allowed methods: `AES256` and `aws:kms`.
+--cloud-provider {aws-s3,azure-blob-storage}
+:    the cloud provider to which the backup should be uploaded
+
+-P, --profile
+:    profile name (e.g. INI section in AWS credentials file)
 
 --endpoint-url
-: override the default S3 URL construction mechanism by specifying an endpoint.
+:    override the default S3 URL construction mechanism by specifying an endpoint.
+
+-e, --encryption
+:    the encryption algorithm used when storing the uploaded data in S3
+     Allowed values: 'AES256'|'aws:kms'
+
+--encryption-scope
+:    the name of an encryption scope defined in the Azure Blob Storage
+     service which is to be used to encrypt the data in Azure
+
 
 # REFERENCES
 
@@ -73,9 +95,21 @@ For AWS:
 * http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-set-up.html
 * http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html.
 
+For Azure Blob Storage:
+
+* https://docs.microsoft.com/en-us/azure/storage/blobs/authorize-data-operations-cli#set-environment-variables-for-authorization-parameters
+* https://docs.microsoft.com/en-us/python/api/azure-storage-blob/?view=azure-python
+
 # DEPENDENCIES
 
+If using `--cloud-provider=aws-s3`:
+
 * boto3
+
+If using `--cloud-provider=azure-blob-storage`:
+
+* azure-storage-blob
+* azure-identity (optional, if you wish to use DefaultAzureCredential)
 
 # EXIT STATUS
 
@@ -92,7 +126,7 @@ This script can be used in conjunction with `pre_archive_retry_script` to relay 
 files to S3, as follows:
 
 ```
-pre_archive_retry_script = 'barman-cloud-wal-archive [*OPTIONS*] *DESTINATION_URL* ${BARMAN_SERVER} ${BARMAN_FILE}'
+pre_archive_retry_script = 'barman-cloud-wal-archive [*OPTIONS*] *DESTINATION_URL* ${BARMAN_SERVER}'
 ```
 
 

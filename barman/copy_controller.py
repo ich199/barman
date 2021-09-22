@@ -41,7 +41,6 @@ from barman.exceptions import CommandFailedException, RsyncListFilesFailure
 from barman.utils import human_readable_timedelta, total_seconds
 
 _logger = logging.getLogger(__name__)
-_logger_lock = Lock()
 
 _worker_callable = None
 """
@@ -325,6 +324,8 @@ class RsyncCopyController(object):
         self.retry_times = retry_times
         self.retry_sleep = retry_sleep
         self.workers = workers
+
+        self._logger_lock = Lock()
 
         # Assume we are running with a recent rsync (>= 3.1)
         self.rsync_has_ignore_missing_args = True
@@ -715,7 +716,7 @@ class RsyncCopyController(object):
         # Store the start time
         job.copy_start_time = datetime.datetime.now()
         # Write in the log that the job is starting
-        with _logger_lock:
+        with self._logger_lock:
             _logger.info(job.description, bucket, "starting")
         if item.is_directory:
             # A directory item must always have checksum and file_list set
@@ -767,7 +768,7 @@ class RsyncCopyController(object):
         # Store the stop time
         job.copy_end_time = datetime.datetime.now()
         # Write in the log that the job is finished
-        with _logger_lock:
+        with self._logger_lock:
             _logger.info(
                 job.description,
                 bucket,
@@ -869,13 +870,13 @@ class RsyncCopyController(object):
         # Build a hash containing all files present on reference directory.
         # Directories are not included
         try:
-            ref_hash = dict(
-                (
-                    (item.path, item)
-                    for item in self._list_files(item, ref)
-                    if item.mode[0] != "d"
-                )
-            )
+            ref_hash = {}
+            ref_has_content = False
+            for file_item in self._list_files(item, ref):
+                if file_item.path != ".":
+                    ref_has_content = True
+                if file_item.mode[0] != "d":
+                    ref_hash[file_item.path] = file_item
         except (CommandFailedException, RsyncListFilesFailure) as e:
             # Here we set ref_hash to None, thus disable the code that marks as
             # "safe matching" those destination files with different time or
@@ -914,8 +915,10 @@ class RsyncCopyController(object):
 
             # Add every file in the source path to the list of files
             # to be protected from deletion ('exclude_and_protect.filter')
-            exclude_and_protect_filter.write("P /" + entry.path + "\n")
-            exclude_and_protect_filter.write("- /" + entry.path + "\n")
+            # But only if we know the destination directory is non-empty
+            if ref_has_content:
+                exclude_and_protect_filter.write("P /" + entry.path + "\n")
+                exclude_and_protect_filter.write("- /" + entry.path + "\n")
 
             # If source item is older than safe_horizon,
             # add it to 'safe.list'
@@ -1068,7 +1071,7 @@ class RsyncCopyController(object):
                 # This is a hard error, as we are unable to parse the output
                 # of rsync. It can only happen with a modified or unknown
                 # rsync version (perhaps newer than 3.1?)
-                msg = "Unable to parse rsync --list-only output line: " "'%s'" % line
+                msg = "Unable to parse rsync --list-only output line: '%s'" % line
                 _logger.error(msg)
                 raise RsyncListFilesFailure(msg)
 

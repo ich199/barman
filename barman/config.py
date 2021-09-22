@@ -47,7 +47,7 @@ FORBIDDEN_SERVER_NAMES = ["all"]
 
 DEFAULT_USER = "barman"
 DEFAULT_LOG_LEVEL = logging.INFO
-DEFAULT_LOG_FORMAT = "%(asctime)s [%(process)s] %(name)s " "%(levelname)s: %(message)s"
+DEFAULT_LOG_FORMAT = "%(asctime)s [%(process)s] %(name)s %(levelname)s: %(message)s"
 
 _TRUE_RE = re.compile(r"""^(true|t|yes|1|on)$""", re.IGNORECASE)
 _FALSE_RE = re.compile(r"""^(false|f|no|0|off)$""", re.IGNORECASE)
@@ -323,6 +323,7 @@ class ServerConfig(object):
         "description",
         "disabled",
         "errors_directory",
+        "forward_config_path",
         "immediate_checkpoint",
         "incoming_wals_directory",
         "last_backup_maximum_age",
@@ -383,6 +384,7 @@ class ServerConfig(object):
         "configuration_files_directory",
         "custom_compression_filter",
         "custom_decompression_filter",
+        "forward_config_path",
         "immediate_checkpoint",
         "last_backup_maximum_age",
         "max_incoming_wals_queue",
@@ -438,6 +440,7 @@ class ServerConfig(object):
         "check_timeout": "30",
         "disabled": "false",
         "errors_directory": "%(backup_directory)s/errors",
+        "forward_config_path": "false",
         "immediate_checkpoint": "false",
         "incoming_wals_directory": "%(backup_directory)s/incoming",
         "minimum_redundancy": "0",
@@ -470,6 +473,7 @@ class ServerConfig(object):
         "basebackup_retry_times": int,
         "check_timeout": int,
         "disabled": parse_boolean,
+        "forward_config_path": parse_boolean,
         "immediate_checkpoint": parse_boolean,
         "last_backup_maximum_age": parse_time_interval,
         "max_incoming_wals_queue": int,
@@ -518,7 +522,7 @@ class ServerConfig(object):
                     value = parser(new_value)
             except Exception as e:
                 output.warning(
-                    "Ignoring invalid configuration value '%s' " "for key %s in %s: %s",
+                    "Ignoring invalid configuration value '%s' for key %s in %s: %s",
                     new_value,
                     key,
                     source,

@@ -189,7 +189,7 @@ class WalArchiver(with_metaclass(ABCMeta, RemoteStatusMixin)):
             # Exit when archive batch size is reached
             if processed >= batch.run_size:
                 _logger.debug(
-                    "Batch size reached (%s) - " "Exit %s process for %s",
+                    "Batch size reached (%s) - Exit %s process for %s",
                     batch.batch_size,
                     self.name,
                     self.config.name,
@@ -599,7 +599,7 @@ class FileWalArchiver(WalArchiver):
             "archive_command",
             "PostgreSQL 'archive_command' setting",
             remote_status["archive_command"]
-            or "FAILED " "(please set it accordingly to documentation)",
+            or "FAILED (please set it accordingly to documentation)",
         )
         last_wal = remote_status.get("last_archived_wal")
         # If PostgreSQL is >= 9.4 we have the last_archived_time
@@ -745,13 +745,15 @@ class StreamingWalArchiver(WalArchiver):
                 % self.server.streaming.server_txt_version
             )
         # Execute basic sanity checks on pg_receivexlog
+        command = "pg_receivewal"
+        if self.server.streaming.server_version < 100000:
+            command = "pg_receivexlog"
         remote_status = self.get_remote_status()
         if not remote_status["pg_receivexlog_installed"]:
-            raise ArchiverFailure("pg_receivexlog not present in $PATH")
+            raise ArchiverFailure("%s not present in $PATH" % command)
         if not remote_status["pg_receivexlog_compatible"]:
             raise ArchiverFailure(
-                "pg_receivexlog version not compatible with "
-                "PostgreSQL server version"
+                "%s version not compatible with PostgreSQL server version" % command
             )
 
         # Execute sanity check on replication slot usage
@@ -819,10 +821,10 @@ class StreamingWalArchiver(WalArchiver):
             if ret_code < 0:
                 # If the return code is negative, then pg_receivexlog
                 # was terminated by a signal
-                msg = "pg_receivexlog terminated by signal: %s" % abs(ret_code)
+                msg = "%s terminated by signal: %s" % (command, abs(ret_code))
             else:
                 # Otherwise terminated with an error
-                msg = "pg_receivexlog terminated with error code: %s" % ret_code
+                msg = "%s terminated with error code: %s" % (command, ret_code)
 
             raise ArchiverFailure(msg)
         except KeyboardInterrupt:
@@ -1046,7 +1048,7 @@ class StreamingWalArchiver(WalArchiver):
         postgres_status = postgres.get_remote_status()
         syncnames = postgres_status["synchronous_standby_names"]
         _logger.debug(
-            "Look for '%s' in " "'synchronous_standby_names': %s",
+            "Look for '%s' in 'synchronous_standby_names': %s",
             self.config.streaming_archiver_name,
             syncnames,
         )

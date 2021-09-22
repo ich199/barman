@@ -495,7 +495,7 @@ class PostgreSQLConnection(PostgreSQL):
                 return False
             cur = self._cursor()
             cur.execute(
-                "SELECT count(*) FROM pg_extension " "WHERE extname = 'pgespresso'"
+                "SELECT count(*) FROM pg_extension WHERE extname = 'pgespresso'"
             )
             q_result = cur.fetchone()[0]
             return q_result > 0
@@ -530,7 +530,7 @@ class PostgreSQLConnection(PostgreSQL):
         """
         try:
             cur = self._cursor()
-            cur.execute("SELECT usesuper FROM pg_user " "WHERE usename = CURRENT_USER")
+            cur.execute("SELECT usesuper FROM pg_user WHERE usename = CURRENT_USER")
             return cur.fetchone()[0]
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug(
@@ -555,8 +555,6 @@ class PostgreSQLConnection(PostgreSQL):
           usesuper
           OR
           (
-            userepl
-            AND
             (
               pg_has_role(CURRENT_USER, 'pg_monitor', 'MEMBER')
               OR
@@ -590,7 +588,7 @@ class PostgreSQLConnection(PostgreSQL):
             return cur.fetchone()[0]
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug(
-                "Error checking privileges for functions " "needed for backups: %s",
+                "Error checking privileges for functions needed for backups: %s",
                 force_str(e).strip(),
             )
             return None
@@ -635,7 +633,7 @@ class PostgreSQLConnection(PostgreSQL):
                 return cur.fetchone()
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug(
-                "Error retrieving current xlog " "detailed information: %s",
+                "Error retrieving current xlog detailed information: %s",
                 force_str(e).strip(),
             )
         return None
@@ -674,9 +672,7 @@ class PostgreSQLConnection(PostgreSQL):
             # We can't use the `get_setting` method here, because it
             # use `SHOW`, returning an human readable value such as "16MB",
             # while we prefer a raw value such as 16777216.
-            cur.execute(
-                "SELECT setting " "FROM pg_settings " "WHERE name='wal_segment_size'"
-            )
+            cur.execute("SELECT setting FROM pg_settings WHERE name='wal_segment_size'")
             result = cur.fetchone()
             wal_segment_size = int(result[0])
 
@@ -684,7 +680,7 @@ class PostgreSQLConnection(PostgreSQL):
             # blocks
             if self.server_version < 110000:
                 cur.execute(
-                    "SELECT setting " "FROM pg_settings " "WHERE name='wal_block_size'"
+                    "SELECT setting FROM pg_settings WHERE name='wal_block_size'"
                 )
                 result = cur.fetchone()
                 wal_block_size = int(result[0])
@@ -694,7 +690,7 @@ class PostgreSQLConnection(PostgreSQL):
             return wal_segment_size
         except ValueError as e:
             _logger.error(
-                "Error retrieving current xlog " "segment size: %s",
+                "Error retrieving current xlog segment size: %s",
                 force_str(e).strip(),
             )
             return None
@@ -722,7 +718,7 @@ class PostgreSQLConnection(PostgreSQL):
 
         try:
             cur = self._cursor()
-            cur.execute("SELECT sum(pg_tablespace_size(oid)) " "FROM pg_tablespace")
+            cur.execute("SELECT sum(pg_tablespace_size(oid)) FROM pg_tablespace")
             return cur.fetchone()[0]
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug(
@@ -742,9 +738,7 @@ class PostgreSQLConnection(PostgreSQL):
             # We can't use the `get_setting` method here, because it
             # uses `SHOW`, returning an human readable value such as "5min",
             # while we prefer a raw value such as 300.
-            cur.execute(
-                "SELECT setting " "FROM pg_settings " "WHERE name='archive_timeout'"
-            )
+            cur.execute("SELECT setting FROM pg_settings WHERE name='archive_timeout'")
             result = cur.fetchone()
             archive_timeout = int(result[0])
 
@@ -766,7 +760,7 @@ class PostgreSQLConnection(PostgreSQL):
             # uses `SHOW`, returning an human readable value such as "5min",
             # while we prefer a raw value such as 300.
             cur.execute(
-                "SELECT setting " "FROM pg_settings " "WHERE name='checkpoint_timeout'"
+                "SELECT setting FROM pg_settings WHERE name='checkpoint_timeout'"
             )
             result = cur.fetchone()
             checkpoint_timeout = int(result[0])
@@ -1023,7 +1017,7 @@ class PostgreSQLConnection(PostgreSQL):
 
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug(
-                "Error retrieving PostgreSQL configuration files " "location: %s",
+                "Error retrieving PostgreSQL configuration files location: %s",
                 force_str(e).strip(),
             )
             self.configuration_files = {}
@@ -1060,7 +1054,7 @@ class PostgreSQLConnection(PostgreSQL):
             return cur.fetchone()[0]
         except (PostgresConnectionError, psycopg2.Error) as e:
             _logger.debug(
-                "Error issuing pg_create_restore_point()" "command: %s",
+                "Error issuing pg_create_restore_point() command: %s",
                 force_str(e).strip(),
             )
             return None
@@ -1297,7 +1291,7 @@ class PostgreSQLConnection(PostgreSQL):
             conn.rollback()
             cur = conn.cursor(cursor_factory=DictCursor)
             cur.execute(
-                "SELECT pgespresso_stop_backup(%s) AS end_wal, " "now() AS timestamp",
+                "SELECT pgespresso_stop_backup(%s) AS end_wal, now() AS timestamp",
                 (backup_label,),
             )
             return cur.fetchone()
@@ -1329,9 +1323,12 @@ class PostgreSQLConnection(PostgreSQL):
         """
         try:
             conn = self.connect()
-            # Requires superuser privilege
             if not self.has_backup_privileges:
-                raise BackupFunctionsAccessRequired()
+                raise BackupFunctionsAccessRequired(
+                    "Postgres user '%s' is missing required privileges "
+                    "(see \"Preliminary steps\" in the Barman manual)"
+                    % self.conn_parameters.get("user")
+                )
 
             # If this server is in recovery there is nothing to do
             if self.is_in_recovery:
@@ -1389,7 +1386,11 @@ class PostgreSQLConnection(PostgreSQL):
             cur = self._cursor(cursor_factory=NamedTupleCursor)
 
             if not self.has_backup_privileges:
-                raise BackupFunctionsAccessRequired()
+                raise BackupFunctionsAccessRequired(
+                    "Postgres user '%s' is missing required privileges "
+                    "(see \"Preliminary steps\" in the Barman manual)"
+                    % self.conn_parameters.get("user")
+                )
 
             # pg_stat_replication is a system view that contains one
             # row per WAL sender process with information about the
@@ -1424,11 +1425,9 @@ class PostgreSQLConnection(PostgreSQL):
                 what = "r.*, rs.slot_name"
                 # Look for replication slot name
                 from_repslot = (
-                    "LEFT JOIN pg_replication_slots rs " "ON (r.pid = rs.active_pid) "
+                    "LEFT JOIN pg_replication_slots rs ON (r.pid = rs.active_pid) "
                 )
-                where_clauses += [
-                    "(rs.slot_type IS NULL OR " "rs.slot_type = 'physical')"
-                ]
+                where_clauses += ["(rs.slot_type IS NULL OR rs.slot_type = 'physical')"]
             elif self.server_version >= 90500:
                 # PostgreSQL 9.5/9.6
                 what = (
@@ -1452,11 +1451,9 @@ class PostgreSQLConnection(PostgreSQL):
                 )
                 # Look for replication slot name
                 from_repslot = (
-                    "LEFT JOIN pg_replication_slots rs " "ON (r.pid = rs.active_pid) "
+                    "LEFT JOIN pg_replication_slots rs ON (r.pid = rs.active_pid) "
                 )
-                where_clauses += [
-                    "(rs.slot_type IS NULL OR " "rs.slot_type = 'physical')"
-                ]
+                where_clauses += ["(rs.slot_type IS NULL OR rs.slot_type = 'physical')"]
             elif self.server_version >= 90400:
                 # PostgreSQL 9.4
                 what = (
